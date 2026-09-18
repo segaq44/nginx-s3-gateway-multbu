@@ -32,7 +32,8 @@ import awssig2 from "./awssig2.js";
 import awssig4 from "./awssig4.js";
 import utils from "./utils.js";
 
-_requireEnvVars('S3_BUCKET_NAME');
+// CHANGE: S3_BUCKET_NAME is no longer required
+//_requireEnvVars('S3_BUCKET_NAME');
 _requireEnvVars('S3_SERVER');
 _requireEnvVars('S3_SERVER_PROTO');
 _requireEnvVars('S3_SERVER_PORT');
@@ -211,7 +212,9 @@ function s3date(r) {
  * @returns {string} AWS authentication signature
  */
 function s3auth(r) {
-    const bucket = process.env['S3_BUCKET_NAME'];
+    // CHANGE: use r.variables.s3_bucket
+    //const bucket = process.env['S3_BUCKET_NAME'];
+    let bucket = r.variables.s3_bucket;
     const region = process.env['S3_REGION'];
     const host = r.variables.s3_host;
     const sigver = process.env['AWS_SIGS_VERSION'];
@@ -340,7 +343,9 @@ function _s3ReqParamsForSigV4(r, bucket, host) {
  * @returns {string} start of the file path for the S3 object URI
  */
 function s3BaseUri(r) {
-    const bucket = process.env['S3_BUCKET_NAME'];
+    // CHANGE: use r.variables.s3_bucket
+    //const bucket = process.env['S3_BUCKET_NAME'];
+    let bucket = r.variables.s3_bucket;
     // Valid S3_STYLE values are 'virtual', 'virtual-v2' and 'path'; anything
     // else behaves as virtual-style. Read per call (like S3_BUCKET_NAME
     // above) rather than into an import-time const so unit tests can
@@ -585,6 +590,8 @@ function _s3DirQueryParams(r, uriPath, method) {
  * @param r {NginxHTTPRequest} HTTP request object
  */
 function redirectToS3(r) {
+    utils.debug_log(r, '*** s3_bucket: ' + r.variables.s3_bucket);
+    utils.debug_log(r, '*** uri_path: ' + r.variables.uri_path);
     // This is a read-only S3 gateway, so we do not support any other methods
     if (!(r.method === 'GET' || r.method === 'HEAD')) {
         utils.debug_log(r, 'Invalid method requested: ' + r.method);
@@ -598,7 +605,20 @@ function redirectToS3(r) {
      * proxy a signed bucket-root GET upstream, leaking an object listing
      * while directory listing is disabled (GH-88). */
     const uriPath = _collapseDuplicateSlashes(r.variables.uri_path);
+    // CHANGE: bucket must be defined
+    const bucket = r.variables.s3_bucket;
     const isDirectoryListing = ALLOW_LISTING && _isDirectory(uriPath);
+
+    // CHANGE: bucket must be defined
+    if (bucket === "") {
+        utils.debug_log(r, 'Bucket name is empty');
+        r.internalRedirect("@error404");
+        return;
+    }
+    // CHANGE: when uriPath is empty, append slash
+    if (uriPath === "") {
+        return r.internalRedirect("@trailslash");
+    }
 
     if (isDirectoryListing && (r.method === 'GET' || r.method === 'HEAD')) {
         r.internalRedirect("@s3PreListing");

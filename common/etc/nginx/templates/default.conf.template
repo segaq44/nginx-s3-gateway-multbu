@@ -13,11 +13,35 @@ include /etc/nginx/conf.d/gateway/v${AWS_SIGS_VERSION}_js_vars.conf;
 # do a global replace, so this variable is njs-derived.
 js_set $uri_full_path s3gateway.uriFullPath;
 
-# Remove/replace a portion of request URL (if configured)
-map $uri_full_path $uri_path {
-	"~^$STRIP_LEADING_DIRECTORY_PATH(.*)"  $PREFIX_LEADING_DIRECTORY_PATH$1;
+# BEGIN OF CHANGES
+# >>>>>>
+# - add intermediate variable uri_proxy_path with removed/replaced portion of URL
+# - change variable uri_full_path to extract bucket name expected at first in the path
+# - add the new variable bucket extracted from the path
+## Remove/replace a portion of request URL (if configured)
+#map $uri_full_path $uri_path {
+#       "~^$STRIP_LEADING_DIRECTORY_PATH(.*)"  $PREFIX_LEADING_DIRECTORY_PATH$1;
+#    default $PREFIX_LEADING_DIRECTORY_PATH$uri_full_path;
+#}
+
+map $uri_full_path $uri_proxy_path {
+    "~^$STRIP_LEADING_DIRECTORY_PATH(.*)"  $PREFIX_LEADING_DIRECTORY_PATH$1;
     default $PREFIX_LEADING_DIRECTORY_PATH$uri_full_path;
 }
+
+map $uri_proxy_path $s3_bucket {
+    "~^/(?<bucket>[^/]+?)$"     $bucket;
+    "~^/(?<bucket>[^/]+?)/.*$"  $bucket;
+    default                     "";
+}
+
+map  $uri_proxy_path $uri_path {
+    "~^/(?<bucket>[^/]+?)/(?<path>.*?)$" /$path;
+    default                              "";
+}
+
+# <<<<<<
+# END OF CHANGES
 
 # Detects a 'no-cache' token in the client's Cache-Control request header
 # (sent by browsers on a hard refresh). Token-aware so that substrings of
@@ -272,7 +296,9 @@ server {
         # Apply XSL transformation to the XML returned from S3 directory listing
         # results such that we can output an HTML directory contents list.
         xslt_stylesheet /etc/nginx/include/listing.xsl;
-        xslt_string_param rootPath '${DIRECTORY_LISTING_PATH_PREFIX}';
+        # CHANGE: append the bucket name
+        #xslt_string_param rootPath '${DIRECTORY_LISTING_PATH_PREFIX}';
+        xslt_string_param rootPath '${DIRECTORY_LISTING_PATH_PREFIX}${s3_bucket}/';
         xslt_string_param prefixPath '${PREFIX_LEADING_DIRECTORY_PATH}';
         xslt_types application/xml;
 
@@ -335,7 +361,9 @@ server {
         # Apply XSL transformation to the XML returned from S3 directory listing
         # results such that we can output an HTML directory contents list.
         xslt_stylesheet /etc/nginx/include/listing.xsl;
-        xslt_string_param rootPath '${DIRECTORY_LISTING_PATH_PREFIX}';
+        # CHANGE: append the bucket name
+        #xslt_string_param rootPath '${DIRECTORY_LISTING_PATH_PREFIX}';
+        xslt_string_param rootPath '${DIRECTORY_LISTING_PATH_PREFIX}${s3_bucket}/';
         xslt_string_param prefixPath '${PREFIX_LEADING_DIRECTORY_PATH}';
         xslt_types application/xml;
 
